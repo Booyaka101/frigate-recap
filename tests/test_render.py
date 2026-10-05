@@ -6,7 +6,7 @@ import pytest
 from frigate_recap.config import RecapConfig
 from frigate_recap.frigate import FrigateClient
 from frigate_recap.render import plan_recap
-from tests.conftest import serve
+from tests.conftest import run_cli, serve
 from tests.mock_frigate import create_mock
 from tests.fixtures import (
     DAY,
@@ -191,26 +191,14 @@ def test_unknown_timezone_is_a_clean_error(tmp_path):
 
 
 def test_min_score_out_of_range_is_rejected():
-    code, out, err = _run_cli(["--day", DAY.isoformat(), "--base-url", "http://127.0.0.1:1",
-                               "--min-score", "1.5"])
+    code, out, err = run_cli(["--day", DAY.isoformat(), "--base-url", "http://127.0.0.1:1",
+                              "--min-score", "1.5"])
     assert code == 1
     assert "--min-score must be between 0.0 and 1.0" in err
 
 
 def test_max_clip_seconds_must_be_positive():
-    code, out, err = _run_cli(["--day", DAY.isoformat(), "--base-url", "http://127.0.0.1:1",
-                               "--max-clip-seconds", "0"])
+    code, out, err = run_cli(["--day", DAY.isoformat(), "--base-url", "http://127.0.0.1:1",
+                              "--max-clip-seconds", "0"])
     assert code == 1
     assert "--max-clip-seconds must be positive" in err
-
-
-def _run_cli(argv):
-    import contextlib
-    import io
-
-    from frigate_recap import cli
-
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = cli.main(argv)
-    return code, out.getvalue(), err.getvalue()

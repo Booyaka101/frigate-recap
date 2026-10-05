@@ -10,6 +10,7 @@ import httpx
 PAGE_SIZE = 500
 RETRY_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = 1.0
+MAX_PAGES = 40
 CLIP_TEMPLATE = "/api/events/{event_id}/clip.mp4"
 OPENAPI_CANDIDATES = ("/api/openapi.json", "/openapi.json")
 
@@ -203,8 +204,14 @@ class FrigateClient:
                 raise FrigateAuthError(f"auth failed: HTTP {resp.status_code}")
             if 200 <= resp.status_code < 300:
                 return resp
-            if resp.status_code >= 500:
+            if resp.status_code == 429 or resp.status_code >= 500:
                 last_error = FrigateApiError(f"HTTP {resp.status_code} from {path}")
+                retry_after = resp.headers.get("retry-after")
+                if attempt + 1 < self._attempts and retry_after:
+                    try:
+                        self._sleep(min(float(retry_after), 30.0))
+                    except ValueError:
+                        pass
                 continue
             raise FrigateApiError(f"HTTP {resp.status_code} from {path}")
         if isinstance(last_error, FrigateApiError):
@@ -233,13 +240,17 @@ class FrigateClient:
 
         The singular `label`/`zone` params are the old names every 0.14-0.18
         release accepts; the server splits them on commas itself.
+
+        Paging continues until an empty page, so a server that caps `limit`
+        below what we asked for still yields everything; a server that ignores
+        `offset` is detected by page overlap and reported instead of looping.
         """
         events: list[dict] = []
         seen: set[str] = set()
         offset = 0
         note: str | None = None
 
-        while True:
+        for _ in range(MAX_PAGES):
             params: dict = {
                 "after": f"{after:.3f}",
                 "before": f"{before:.3f}",
@@ -258,17 +269,20 @@ class FrigateClient:
             page = self._get_json("/api/events", params)
             if not isinstance(page, list):
                 raise FrigateApiError("unexpected /api/events response: expected a JSON array")
+            if not page:
+                break
 
             fresh = [raw for raw in page if isinstance(raw, dict) and raw.get("id") not in seen]
             for raw in fresh:
                 seen.add(str(raw["id"]))
             events.extend(fresh)
 
-            if len(page) < PAGE_SIZE or not fresh:
-                if len(page) >= PAGE_SIZE and not fresh:
-                    note = f"server ignored offset paging; results capped at {PAGE_SIZE} events"
+            if not fresh:
+                note = f"server ignored offset paging; results capped at {len(events)} events"
                 break
             offset += len(page)
+        else:
+            note = f"stopped after {MAX_PAGES} pages ({len(events)} events)"
 
         return events, note
 
@@ -295,11 +309,12 @@ class FrigateClient:
                     if resp.status_code == 404:
                         last_error = FrigateApiError("clip not found (HTTP 404)")
                         break
+                    if resp.status_code == 429 or resp.status_code >= 500:
+                        last_error = FrigateApiError(f"HTTP {resp.status_code}")
+                        continue
                     if resp.status_code >= 400:
                         last_error = FrigateApiError(f"HTTP {resp.status_code}")
-                        if resp.status_code < 500:
-                            break
-                        continue
+                        break
                     written = 0
                     with open(dest_path, "wb") as fh:
                         for chunk in resp.iter_bytes():

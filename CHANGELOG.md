@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.2 - 2026-10-05
+
+Second review pass: rate limits, paging, and download throughput.
+
+- HTTP 429 is now treated as transient everywhere (events, summary and clip
+  downloads): retried like a 5xx, honouring `Retry-After` up to 30 seconds.
+  A rate-limiting reverse proxy no longer fails the run or skips clips.
+- Event paging continues until an empty page instead of stopping at the first
+  short one, so a server that caps the page size below the requested limit
+  still yields the whole day. A server that ignores `offset` is detected by
+  page overlap and reported in the manifest as before, and a hard 40-page
+  guard stops pathological servers.
+- Clips download four at a time; the render still walks events in
+  chronological order, and per-event retry and skip behaviour is unchanged.
+- The manifest records `expected_duration_seconds` (from the plan formula)
+  next to the probed actual duration, so drift is visible in the file.
+- `os.replace` failures (the previous recap still open in a player on Windows)
+  are a one-line error instead of a traceback.
+- CI jobs carry `timeout-minutes`, and the duplicated test CLI helper moved
+  into conftest.
+
 ## 0.1.1 - 2026-10-05
 
 Review-pass fixes and small hardening. No output changes for a clean run except

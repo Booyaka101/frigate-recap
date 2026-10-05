@@ -1,8 +1,6 @@
 """End-to-end renders against the mock Frigate. Requires ffmpeg/ffprobe."""
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import pathlib
 import subprocess
@@ -10,8 +8,7 @@ import sys
 
 import pytest
 
-from frigate_recap import cli
-from tests.conftest import ffmpeg_available, serve
+from tests.conftest import ffmpeg_available, run_cli, serve
 from tests.fixtures import (
     DAY,
     CAR_ID,
@@ -42,13 +39,6 @@ def _clean_env(monkeypatch):
 @pytest.fixture(scope="module")
 def clips_dir(tmp_path_factory):
     return generate_clips(tmp_path_factory.mktemp("clips"))
-
-
-def run_cli(argv: list[str]) -> tuple[int, str, str]:
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = cli.main(argv)
-    return code, out.getvalue(), err.getvalue()
 
 
 def probe(path) -> dict:
@@ -117,6 +107,7 @@ def test_worked_example(tmp_path, clips_dir):
     # 1.5 title + 7.2 + 9.8 + 5.5 clips + 1.5 end - 4 joins * 0.4
     assert duration == pytest.approx(23.9, abs=0.5)
     assert manifest["output"]["duration_seconds"] == pytest.approx(duration, abs=0.5)
+    assert manifest["output"]["expected_duration_seconds"] == pytest.approx(23.9, abs=0.1)
     vs = video_stream(data)
     assert (vs["width"], vs["height"]) == (1920, 1080)
     assert vs["codec_name"] == "h264"
@@ -192,6 +183,27 @@ def test_empty_day_writes_quiet_card(tmp_path):
     assert float(data["format"]["duration"]) == pytest.approx(5.0, abs=0.3)
     vs = video_stream(data)
     assert (vs["width"], vs["height"]) == (1920, 1080)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="POSIX can replace a file that is open")
+def test_locked_output_fails_cleanly(tmp_path):
+    # the previous recap open in a player blocks os.replace on Windows; that
+    # must be a one-line error, not a traceback
+    app = create_mock([], [], clips={})
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    target = out_dir / "recap-2026-10-04.mp4"
+    lock = open(target, "wb")
+    try:
+        with serve(app) as base_url:
+            code, stdout, stderr = run_cli(
+                ["--day", DAY.isoformat(), "--base-url", base_url, "--out", str(out_dir)]
+            )
+    finally:
+        lock.close()
+    assert code == 1
+    assert "cannot finalize" in stderr
+    assert "Traceback" not in stderr
 
 
 def test_wrong_api_key_exits_2(monkeypatch, tmp_path):

@@ -101,14 +101,14 @@ Plan durations come from event metadata. Real Frigate clips include pre/post cap
     {"id": "1791382353.012345-abc123", "camera": "front_door", "label": "person",
      "zones": ["front_door_steps"], "duration_seconds": 7.2, "clip_seconds": 7.2,
      "score": 0.91}
-  ],
-  "skipped": [],
+  ],  "skipped": [],
   "per_camera": {"front_door": {"included": 1, "skipped": 0}},
-  "output": {"duration_seconds": 23.9, "width": 1920, "height": 1080, "fps": 30}
+  "output": {"duration_seconds": 23.9, "expected_duration_seconds": 23.9,
+             "width": 1920, "height": 1080, "fps": 30}
 }
 ```
 
-`duration_seconds` is the event's own length; `clip_seconds` is what made it into the video after the `--max-clip-seconds` clamp.
+`duration_seconds` is what probed off the finished file; `expected_duration_seconds` is what the plan formula predicted. If those two ever drift apart, the manifest is where you look first. Per event, `duration_seconds` is the API's own length and `clip_seconds` is what made the cut after the `--max-clip-seconds` clamp.
 
 ### Exit codes
 
@@ -126,7 +126,7 @@ A day with no events still produces `recap-YYYY-MM-DD.mp4`: a 5 second quiet-day
 
 1. `GET /api/events` for the day window (paginated, deduplicated), then every filter is applied again client-side so ordering and day assignment do not depend on server defaults.
 2. Title card (1.5s): date and event/camera counts from `GET /api/events/summary`.
-3. Each clip is downloaded with retries, probed, normalized to **1920x1080 at 30 fps** (scaled to fit, padded with black, never cropped) and burned with its lower third. Clips without an audio track get a generated silent stereo track so every segment is uniform.
+3. Each clip is downloaded (four at a time, with retries) and probed, then normalized to **1920x1080 at 30 fps** (scaled to fit, padded with black, never cropped) and burned with its lower third. Clips without an audio track get a generated silent stereo track so every segment is uniform.
 4. All segments are joined with 0.4s crossfades (`xfade` + `acrossfade`), followed by a stats end card (1.5s).
 
 Total duration = title 1.5 + sum of clip durations + end 1.5, minus 0.4 per join. The three-clip example above: 1.5 + 22.5 + 1.5 - 4 x 0.4 = **23.9s**.

@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,45 @@ from .normalize import ProbeError, normalize_command, probe_clip
 
 class RenderError(Exception):
     """A one-line render failure."""
+
+
+DOWNLOAD_WORKERS = 4
+
+
+def _download_all(
+    client: FrigateClient,
+    included: list[RecapEvent],
+    workdir: Path,
+    log,
+) -> dict[str, Path | None]:
+    """Download every clip concurrently. Missing entries failed after retries."""
+    if not included:
+        return {}
+    workers = min(DOWNLOAD_WORKERS, len(included))
+    log(f"downloading {len(included)} clips, {workers} at a time")
+    results: dict[str, Path | None] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(
+                client.download_clip, event.id,
+                str(workdir / f"clip_{index:04d}_{event.id}.mp4"),
+            ): (index, event)
+            for index, event in enumerate(included)
+        }
+        for done_count, future in enumerate(as_completed(futures), start=1):
+            index, event = futures[future]
+            ok = future.result()  # re-raises auth failures in this thread
+            results[event.id] = workdir / f"clip_{index:04d}_{event.id}.mp4" if ok else None
+            log(f"downloaded {done_count}/{len(included)}")
+    return results
+
+
+def _promote(staging_path: Path, out_path: Path) -> None:
+    try:
+        os.replace(staging_path, out_path)
+    except OSError as exc:
+        # the common Windows case is the previous recap still open in a player
+        raise RenderError(f"cannot finalize {out_path.name} (file locked?): {exc}") from exc
 
 
 def lower_third(event: RecapEvent, tz=None) -> str:
@@ -339,15 +379,17 @@ def render_recap(
             cards.draw_quiet_card(str(title_png), cfg.day, font)
             _run(card_command(cfg.ffmpeg, str(title_png), str(staging_path), QUIET_SECONDS), "quiet-day card")
             final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
-            os.replace(staging_path, out_path)
+            expected_duration = QUIET_SECONDS
+            _promote(staging_path, out_path)
         else:
             cards.draw_title_card(str(title_png), cfg.day, stats["events"], stats["cameras"], font)
 
             segment_paths: list[Path] = []
 
+            downloads = _download_all(client, included, workdir, log)
             for index, event in enumerate(included):
-                downloaded = workdir / f"clip_{index:04d}_{event.id}.mp4"
-                if not client.download_clip(event.id, str(downloaded)):
+                downloaded = downloads.get(event.id)
+                if downloaded is None:
                     skipped.append(SkippedEvent(event, SKIP_DOWNLOAD_FAILED))
                     log(f"clip {event.id} ({event.camera}/{event.label}): download failed after retries; skipped")
                     continue
@@ -386,7 +428,8 @@ def render_recap(
                 cards.draw_quiet_card(str(title_png), cfg.day, font)
                 _run(card_command(cfg.ffmpeg, str(title_png), str(staging_path), QUIET_SECONDS), "quiet-day card")
                 final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
-                os.replace(staging_path, out_path)
+                expected_duration = QUIET_SECONDS
+                _promote(staging_path, out_path)
             else:
                 # The end card counts what is actually in the video, so a clip
                 # lost to a download failure moves to the skipped line.
@@ -421,7 +464,8 @@ def render_recap(
 
                 _run(final_command(cfg.ffmpeg, segment_paths, graph, str(staging_path)), "final concat")
                 final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
-                os.replace(staging_path, out_path)
+                expected_duration = total_duration(durations, cfg.xfade_seconds)
+                _promote(staging_path, out_path)
 
         log(f"wrote {out_path} ({final_duration:.1f}s, stats source: {stats.get('source')})")
         manifest = manifest_mod.build_manifest(
@@ -434,6 +478,7 @@ def render_recap(
             note=note,
             versions={"frigate_recap": __version__, "ffmpeg": ffmpeg_version(cfg.ffmpeg)},
             clip_seconds=clip_seconds,
+            expected_duration=expected_duration,
         )
         manifest_mod.write(str(manifest_path), manifest)
         log(f"wrote {manifest_path}")

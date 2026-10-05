@@ -64,6 +64,7 @@ def build_manifest(
     note: str | None = None,
     versions: dict | None = None,
     clip_seconds: dict[str, float] | None = None,
+    expected_duration: float | None = None,
 ) -> dict:
     per_camera: dict[str, dict[str, int]] = {}
     per_label: dict[str, int] = {}
@@ -114,6 +115,7 @@ def build_manifest(
         "output": {
             "file": output_file,
             "duration_seconds": round(output_duration, 3) if output_duration is not None else None,
+            "expected_duration_seconds": round(expected_duration, 3) if expected_duration is not None else None,
             "width": 1920,
             "height": 1080,
             "fps": 30,

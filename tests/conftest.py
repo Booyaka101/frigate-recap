@@ -39,6 +39,19 @@ requires_ffmpeg = pytest.mark.skipif(
 )
 
 
+def run_cli(argv: list[str]) -> tuple[int, str, str]:
+    """Run cli.main in-process, capturing stdout and stderr."""
+    import contextlib
+    import io
+
+    from frigate_recap import cli
+
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = cli.main(argv)
+    return code, out.getvalue(), err.getvalue()
+
+
 def _free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

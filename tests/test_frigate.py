@@ -50,8 +50,9 @@ def make_client(handler, **over) -> FrigateClient:
     return FrigateClient("http://mock.test", **defaults)
 
 
-def json_response(payload, status=200):
-    return httpx.Response(status, json=payload, request=httpx.Request("GET", "http://mock.test"))
+def json_response(payload, status=200, headers=None):
+    return httpx.Response(status, json=payload, headers=headers or {},
+                          request=httpx.Request("GET", "http://mock.test"))
 
 
 class TestSelectEvents:
@@ -221,6 +222,56 @@ class TestClient:
             client.events(*WINDOW)
         client.close()
 
+    def test_429_is_retried_then_succeeds(self):
+        calls = {"n": 0}
+
+        def handler(request):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return json_response({}, status=429, headers={"retry-after": "0"})
+            return json_response([])
+
+        client = make_client(handler)
+        got, _ = client.events(*WINDOW)
+        client.close()
+        assert got == []
+        assert calls["n"] == 2
+
+    def test_429_exhausted_names_the_status(self):
+        client = make_client(lambda request: json_response({}, status=429))
+        with pytest.raises(FrigateApiError, match="429"):
+            client.events(*WINDOW)
+        client.close()
+
+    def test_pagination_survives_a_server_side_limit_cap(self, monkeypatch):
+        # a server that serves fewer than the requested limit per page must
+        # still yield everything: page until an empty page, not a short one
+        monkeypatch.setattr(frigate_mod, "PAGE_SIZE", 2)
+        events = worked_example_events()
+
+        def handler(request):
+            offset = int(request.url.params.get("offset", 0))
+            return json_response(events[offset:offset + 1])
+
+        client = make_client(handler)
+        got, note = client.events(*WINDOW)
+        client.close()
+        assert len(got) == 3
+        assert note is None
+
+    def test_offset_page_guard_stops_eventual_loops(self, monkeypatch):
+        monkeypatch.setattr(frigate_mod, "MAX_PAGES", 2)
+
+        def handler(request):
+            offset = int(request.url.params.get("offset", 0))
+            return json_response([{"id": f"fresh-{offset}"}])
+
+        client = make_client(handler)
+        got, note = client.events(*WINDOW)
+        client.close()
+        assert len(got) == 2
+        assert note and "pages" in note
+
     def test_summary_parses_rows(self):
         client = make_client(lambda request: json_response(summary_rows()))
         rows = client.event_summary()
@@ -300,6 +351,27 @@ class TestClipDownload:
         assert client.download_clip("missing-id", str(dest)) is False
         client.close()
         assert calls["n"] == 1
+
+    def test_download_429_is_retried(self, tmp_path):
+        state: dict = {}
+
+        def handler(request):
+            if request.url.path.endswith("openapi.json"):
+                return httpx.Response(404, request=request)
+            if not request.url.path.endswith("/clip.mp4"):
+                return httpx.Response(404, request=request)
+            state["calls"] = state.get("calls", 0) + 1
+            if state["calls"] == 1:
+                return json_response({}, status=429, headers={"retry-after": "0"})
+            return httpx.Response(200, content=b"mp4-bytes",
+                                  headers={"content-length": "9"},
+                                  request=request)
+
+        client = make_client(handler)
+        dest = tmp_path / "clip.mp4"
+        assert client.download_clip(CAR_ID, str(dest)) is True
+        client.close()
+        assert state["calls"] == 2
 
     def test_download_auth_failure_propagates(self, tmp_path):
         client = make_client(lambda request: json_response({}, status=401))

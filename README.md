@@ -164,6 +164,10 @@ $ uv run pytest -q
 
 The suite runs against a mock Frigate (FastAPI) with fixture events shaped like a real server's. End-to-end tests render real video with ffmpeg; they skip cleanly when ffmpeg is absent. CI runs the suite on Ubuntu and Windows and builds the image.
 
+## Companion tool
+
+If your problem is disk space rather than review time, [frigate-tier](https://github.com/Booyaka101/frigate-tier) moves old recording segments onto a NAS and keeps them playable in the Frigate UI. The two compose cleanly: frigate-tier archives continuous recordings and previews, while frigate-recap reads event clips over the API, so neither tool touches what the other manages. A typical setup runs both from cron: tier old footage off the fast disk nightly, render yesterday's digest at 00:15.
+
 ## License
 
 MIT. Frigate itself is unrelated to this project; this tool only speaks its HTTP API.

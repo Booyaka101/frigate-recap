@@ -5,30 +5,25 @@
 
 Turn one day of [Frigate](https://frigate.video) NVR events into a single digest MP4: a title card, every event clip normalized and burned with a `HH:MM camera - label` lower third, crossfades between clips, and a stats end card. Built to run from cron.
 
-![A rendered recap: title card, three crossfaded clips with lower thirds, stats end card](examples/images/recap-sample.gif)
+![A rendered recap of the public demo instance: title card, beach-camera clips with lower thirds, stats end card](examples/images/recap-sample.gif)
+
+That is real footage from Frigate's public demo instance, rendered by this tool. Run the same thing yourself (the demo keeps a few days of footage, so pick a recent day):
 
 ```console
-$ export FRIGATE_URL=https://frigate.lan
-$ frigate-recap --day 2026-10-04
-frigate-recap 0.1.3  day 2026-10-04  server https://frigate.lan
-events: 3 fetched, 3 usable, 0 filtered out
-downloading 3 clips, 3 at a time
-downloaded 1/3: driveway/car
-downloaded 2/3: backyard/cat
-downloaded 3/3: front_door/person
-clip 1/3: 08:12 front_door - person (7.2s)
-clip 2/3: 09:40 driveway - car (9.8s)
-clip 3/3: 23:14 backyard - cat (5.5s)
-wrote recap-2026-10-04.mp4 (23.9s, stats source: summary)
-wrote recap-2026-10-04.json
-done: 3 clips, 0 skipped, 5s wall
+$ export FRIGATE_URL=https://demo.frigate.video
+$ frigate-recap --day 2026-10-04 --tz UTC --camera beach --label person \
+    --min-score 0.84 --max-clip-seconds 3 --out recaps
+wrote recaps/recap-2026-10-04.mp4 (23.4s, stats source: summary)
+done: 8 clips, 0 skipped, 18s wall
 ```
 
-The GIF above is rendered pixels from that exact command: a 1080p30 MP4, 23.9 seconds long, with the three lower thirds `08:12 front_door - person`, `09:40 driveway - car` and `23:14 backyard - cat`. The card frames below are the same render at full resolution.
+The full 23-second video from the GIF is attached to the [v0.1.3 release](https://github.com/Booyaka101/frigate-recap/releases/tag/v0.1.3) as `sample-recap-2026-10-04.mp4`.
 
-| Title card | Lower third | End card |
+The GIF is an excerpt; the frame below is full resolution. The title and end cards shown are from the walkthrough example further down.
+
+| Title card | Lower third (demo footage) | End card |
 |---|---|---|
-| ![Title card](examples/images/title-card.png) | ![Lower third on a clip](examples/images/lower-third.png) | ![Stats end card](examples/images/end-card.png) |
+| ![Title card](examples/images/title-card.png) | ![Lower third on demo footage](examples/images/lower-third.jpg) | ![Stats end card](examples/images/end-card.png) |
 
 ## Why
 

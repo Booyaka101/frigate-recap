@@ -94,10 +94,14 @@ All 8 bar items met:
 ## Verified working (this box)
 - `py -3.12` + `.venv` (uv 0.12.23 inside), ffmpeg N-127197 in `.tools/` (dev only, gitignored), Docker 29.8.0 (engine started during the build).
 
-## Not done / owner-side
-- Nothing published: no git remote push, no ghcr push, no GitHub release (rules forbid publishing; the owner ships from the phone). `git init` + commits done locally.
-- Acceptance (3) on the owner's real Frigate needs FRIGATE_URL for their NVR; the live demo run is the closest proof available here.
-- GitHub repo + topics (frigate/nvr/cctv/home-assistant/ffmpeg) + **v0.1.3 tag**: owner-operated push, then release.yml does the rest.
+## Release record
+- v0.1.3 published: repo github.com/Booyaka101/frigate-recap, topics
+  frigate/nvr/cctv/home-assistant/ffmpeg, GitHub Release with sdist+wheel,
+  ghcr.io/booyaka101/frigate-recap image via .github/workflows/release.yml.
+- CI (ubuntu + windows, py3.12, uv --frozen) green on the released commit
+  before the tag was pushed, verified through the check-runs API.
+- Acceptance (3) on the owner's own NVR remains owner-side: the tool was
+  verified against the live demo.frigate.video instance instead.
 
 ## Next steps (best-in-class candidates, v2 per brief non-goals)
 - Pre-capture aware overlap trim (drop duplicated footage between adjacent events).

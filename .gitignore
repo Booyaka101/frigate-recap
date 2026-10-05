@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.tools/
+.scratch/
+recaps/
+# sample renders in examples/ are generated, not committed; the GIF and card
+# frames in examples/images/ are the only binaries from there that ship
+examples/*.mp4
+examples/*.json

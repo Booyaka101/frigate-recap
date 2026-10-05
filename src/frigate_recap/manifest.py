@@ -65,6 +65,7 @@ def build_manifest(
     versions: dict | None = None,
     clip_seconds: dict[str, float] | None = None,
     expected_duration: float | None = None,
+    wall_seconds: float | None = None,
 ) -> dict:
     per_camera: dict[str, dict[str, int]] = {}
     per_label: dict[str, int] = {}
@@ -92,6 +93,7 @@ def build_manifest(
             "max_clip_seconds": cfg.max_clip_seconds,
         },
         "stats": stats,
+        "wall_seconds": round(wall_seconds, 1) if wall_seconds is not None else None,
         "included": [
             {
                 "id": event.id,

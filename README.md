@@ -1,5 +1,8 @@
 # frigate-recap
 
+[![CI](https://github.com/Booyaka101/frigate-recap/actions/workflows/ci.yml/badge.svg)](https://github.com/Booyaka101/frigate-recap/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Turn one day of [Frigate](https://frigate.video) NVR events into a single digest MP4: a title card, every event clip normalized and burned with a `HH:MM camera - label` lower third, crossfades between clips, and a stats end card. Built to run from cron.
 
 ![A rendered recap: title card, three crossfaded clips with lower thirds, stats end card](examples/images/recap-sample.gif)
@@ -7,14 +10,18 @@ Turn one day of [Frigate](https://frigate.video) NVR events into a single digest
 ```console
 $ export FRIGATE_URL=https://frigate.lan
 $ frigate-recap --day 2026-10-04
-frigate-recap 0.1.0  day 2026-10-04  server https://frigate.lan
+frigate-recap 0.1.3  day 2026-10-04  server https://frigate.lan
 events: 3 fetched, 3 usable, 0 filtered out
+downloading 3 clips, 3 at a time
+downloaded 1/3: driveway/car
+downloaded 2/3: backyard/cat
+downloaded 3/3: front_door/person
 clip 1/3: 08:12 front_door - person (7.2s)
 clip 2/3: 09:40 driveway - car (9.8s)
 clip 3/3: 23:14 backyard - cat (5.5s)
 wrote recap-2026-10-04.mp4 (23.9s, stats source: summary)
 wrote recap-2026-10-04.json
-done: 3 clips, 0 skipped, exit 0
+done: 3 clips, 0 skipped, 5s wall
 ```
 
 The GIF above is rendered pixels from that exact command: a 1080p30 MP4, 23.9 seconds long, with the three lower thirds `08:12 front_door - person`, `09:40 driveway - car` and `23:14 backyard - cat`. The card frames below are the same render at full resolution.

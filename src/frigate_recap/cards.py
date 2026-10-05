@@ -58,24 +58,58 @@ def resolve_font(explicit: str | None = None) -> str | None:
     return None
 
 
-def draw_title_card(path: str, day: date, event_count: int, camera_count: int, font_path: str | None) -> None:
+def draw_title_card(
+    path: str,
+    day: date,
+    event_count: int,
+    camera_count: int,
+    font_path: str | None,
+    filter_note: str | None = None,
+) -> None:
     weekday = day.strftime("%A, %d %B %Y").lstrip("0")
     if event_count == 1:
         body = "1 event"
     else:
         body = f"{event_count} events"
     body += f" from {camera_count} camera{'s' if camera_count != 1 else ''}"
+    rows = (body, filter_note) if filter_note else (body,)
     _write_card(
         path,
         CardText(
             kicker="FRIGATE RECAP",
             headline=day.isoformat(),
             subline=weekday,
-            rows=(body,),
-            footnote="recorded by frigate",
+            rows=rows,
+            footnote="frigate NVR",
         ),
         font_path,
     )
+
+
+END_CARD_MAX_ROWS = 7
+
+
+def end_card_rows(
+    per_camera: dict[str, int],
+    per_label: dict[str, int],
+    skipped: int,
+    max_rows: int = END_CARD_MAX_ROWS,
+) -> tuple[str, ...]:
+    """Rows that fit on the card: cameras first, then labels and the skipped
+    line. Busy systems get a "+N more cameras" line instead of an overflow."""
+    camera_rows = [f"{camera:.<24} {count}" for camera, count in per_camera.items()]
+    tail: list[str] = []
+    if per_label:
+        tail += ["", "  ".join(f"{label} {count}" for label, count in per_label.items())]
+    if skipped:
+        tail += ["", f"{skipped} event{'s' if skipped != 1 else ''} skipped (see manifest)"]
+
+    budget = max_rows - len(tail)
+    if len(camera_rows) > budget:
+        shown = max(budget - 1, 1)
+        hidden = len(camera_rows) - shown
+        camera_rows = camera_rows[:shown] + [f"+{hidden} more cameras (see manifest)"]
+    return tuple(camera_rows + tail)
 
 
 def draw_end_card(
@@ -87,21 +121,13 @@ def draw_end_card(
     per_label: dict[str, int],
     font_path: str | None,
 ) -> None:
-    rows = [f"{camera:.<24} {count}" for camera, count in per_camera.items()]
-    if per_label:
-        labels = "  ".join(f"{label} {count}" for label, count in per_label.items())
-        rows.append("")
-        rows.append(labels)
-    if skipped:
-        rows.append("")
-        rows.append(f"{skipped} event{'s' if skipped != 1 else ''} skipped (see manifest)")
     _write_card(
         path,
         CardText(
             kicker=day.isoformat(),
             headline="DAY IN NUMBERS",
             subline=f"{included} clip{'s' if included != 1 else ''} in this recap",
-            rows=tuple(rows),
+            rows=end_card_rows(per_camera, per_label, skipped),
             footnote="made with frigate-recap",
         ),
         font_path,

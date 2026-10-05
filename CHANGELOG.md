@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.3 - 2026-10-05
+
+UI/UX pass: the help text, the console output and the cards.
+
+- `--help` gained examples, the environment variables, the exit-code contract,
+  and grouped options (filters / output / connection). `--ffmpeg`/`--ffprobe`
+  finally have help text.
+- Filtered recaps say so on the title card ("filtered: camera=front_door,
+  min_score=0.7") instead of looking like an unfiltered day.
+- The stats end card caps its rows and shows "+N more cameras (see manifest)"
+  instead of drawing off the bottom of the frame on busy multi-camera systems.
+- Progress lines: download completions name the camera, and the closing line
+  carries wall time ("done: 3 clips, 0 skipped, 41s wall"). The manifest
+  records `wall_seconds` too.
+- The title card footnote now reads "frigate NVR".
+
 ## 0.1.2 - 2026-10-05
 
 Second review pass: rate limits, paging, and download throughput.

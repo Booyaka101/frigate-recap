@@ -190,6 +190,18 @@ def test_unknown_timezone_is_a_clean_error(tmp_path):
             plan_recap(make_cfg(base_url, tmp_path, tz="Mars/Olympus"), plan_client(base_url))
 
 
+def test_filter_summary_line():
+    from frigate_recap.render import filter_summary_line
+
+    assert filter_summary_line(None, (), None, None) is None
+    assert filter_summary_line("front_door", (), None, None) == "filtered: camera=front_door"
+    assert filter_summary_line(None, ("cat", "car"), None, None) == "filtered: labels=cat,car"
+    assert filter_summary_line("driveway", ("car",), "driveway", 0.7) == (
+        "filtered: camera=driveway, labels=car, zone=driveway, min_score=0.7"
+    )
+    assert filter_summary_line(None, (), None, 0.8) == "filtered: min_score=0.8"
+
+
 def test_min_score_out_of_range_is_rejected():
     code, out, err = run_cli(["--day", DAY.isoformat(), "--base-url", "http://127.0.0.1:1",
                               "--min-score", "1.5"])

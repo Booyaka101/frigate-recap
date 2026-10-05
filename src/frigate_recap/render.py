@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -53,7 +54,8 @@ def _download_all(
     if not included:
         return {}
     workers = min(DOWNLOAD_WORKERS, len(included))
-    log(f"downloading {len(included)} clips, {workers} at a time")
+    log(f"downloading {len(included)} clip{'s' if len(included) != 1 else ''}"
+        + (f", {workers} at a time" if workers > 1 else ""))
     results: dict[str, Path | None] = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
@@ -67,7 +69,7 @@ def _download_all(
             index, event = futures[future]
             ok = future.result()  # re-raises auth failures in this thread
             results[event.id] = workdir / f"clip_{index:04d}_{event.id}.mp4" if ok else None
-            log(f"downloaded {done_count}/{len(included)}")
+            log(f"downloaded {done_count}/{len(included)}: {event.camera}/{event.label}")
     return results
 
 
@@ -85,6 +87,28 @@ def lower_third(event: RecapEvent, tz=None) -> str:
     else:
         when = datetime.fromtimestamp(event.start_time)
     return f"{when:%H:%M} {event.camera} - {event.label}"
+
+
+def filter_summary_line(
+    camera: str | None,
+    labels: tuple[str, ...],
+    zone: str | None,
+    min_score: float | None,
+) -> str | None:
+    """One line naming the active filters, burned onto the title card so a
+    filtered recap describes itself."""
+    parts = []
+    if camera:
+        parts.append(f"camera={camera}")
+    if labels:
+        parts.append(f"labels={','.join(labels)}")
+    if zone:
+        parts.append(f"zone={zone}")
+    if min_score is not None:
+        parts.append(f"min_score={min_score:g}")
+    if not parts:
+        return None
+    return "filtered: " + ", ".join(parts)
 
 
 @dataclass
@@ -355,6 +379,7 @@ def render_recap(
     manifest_path = out_dir / cfg.manifest_name
 
     window_start, window_end = cfg.window
+    started = time.monotonic()
     log(f"frigate-recap {__version__}  day {cfg.day.isoformat()}  server {cfg.base_url}")
     raw_events, paging_note = client.events(
         window_start, window_end, cfg.camera, cfg.labels, cfg.zone, cfg.min_score
@@ -382,7 +407,10 @@ def render_recap(
             expected_duration = QUIET_SECONDS
             _promote(staging_path, out_path)
         else:
-            cards.draw_title_card(str(title_png), cfg.day, stats["events"], stats["cameras"], font)
+            cards.draw_title_card(
+                str(title_png), cfg.day, stats["events"], stats["cameras"], font,
+                filter_note=filter_summary_line(cfg.camera, cfg.labels, cfg.zone, cfg.min_score),
+            )
 
             segment_paths: list[Path] = []
 
@@ -468,6 +496,7 @@ def render_recap(
                 _promote(staging_path, out_path)
 
         log(f"wrote {out_path} ({final_duration:.1f}s, stats source: {stats.get('source')})")
+        elapsed = time.monotonic() - started
         manifest = manifest_mod.build_manifest(
             cfg,
             kept,
@@ -479,9 +508,11 @@ def render_recap(
             versions={"frigate_recap": __version__, "ffmpeg": ffmpeg_version(cfg.ffmpeg)},
             clip_seconds=clip_seconds,
             expected_duration=expected_duration,
+            wall_seconds=elapsed,
         )
         manifest_mod.write(str(manifest_path), manifest)
         log(f"wrote {manifest_path}")
+        log(f"done: {len(kept)} clips, {len(skipped)} skipped, {elapsed:.0f}s wall")
         return manifest
     finally:
         if keep_work:

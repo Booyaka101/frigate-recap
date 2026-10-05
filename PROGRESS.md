@@ -18,6 +18,30 @@ Extra verification beyond the brief:
 - Auth: Frigate's own API auth is JWT bearer via /api/login (port 8971). `x-api-key` is the reverse-proxy pattern -> tool sends both if configured (`FRIGATE_API_KEY` as x-api-key per brief, `FRIGATE_TOKEN` as bearer).
 - Cost: zero paid inputs (self-hosted Frigate, httpx/Pillow/tzdata permissive licenses, system ffmpeg, Docker already installed, GitHub Actions/ghcr free). No cost barrier.
 
+## State: v1.3 UI/UX pass COMPLETE (2026-10-05)
+
+Third loop shipped as **0.1.3** — every user-facing surface reworked:
+
+- `--help`: examples epilog, environment variables, exit-code contract, grouped
+  options (narrow what goes in / output / connection), real help text on
+  --ffmpeg/--ffprobe, SCORE/SECONDS metavars.
+- Title card: filtered recaps self-describe ("filtered: camera=driveway,
+  min_score=0.8" burned under the body line); footnote is "frigate NVR".
+  Verified visually on a filtered render.
+- Stats end card: rows capped at 7 with "+N more cameras (see manifest)" so
+  busy multi-camera systems stay on the frame (was: rows drew off the bottom).
+- Console: download lines name the camera ("downloaded 2/3: driveway/car");
+  closing line is "done: N clips, M skipped, Xs wall" (render logs it; the CLI
+  no longer prints a duplicate); manifest records `wall_seconds`.
+- Missing-FRIGATE_URL error now shows an example address.
+
+Caught during the loop: the cli rewrite dropped `keep_work=args.keep_work`
+(--keep-work silently ignored) — the e2e workdir assertion caught it.
+
+Verification: 67 passed; filtered + unfiltered title cards inspected as pixels;
+docker acceptance on the rebuilt 0.1.3 image (exit 0); live demo re-run (8 real
+clips, 17s wall, exit 0); examples regenerated.
+
 ## State: v1.2 review pass COMPLETE (2026-10-05)
 
 Second loop shipped as **0.1.2**:
@@ -73,7 +97,7 @@ All 8 bar items met:
 ## Not done / owner-side
 - Nothing published: no git remote push, no ghcr push, no GitHub release (rules forbid publishing; the owner ships from the phone). `git init` + commits done locally.
 - Acceptance (3) on the owner's real Frigate needs FRIGATE_URL for their NVR; the live demo run is the closest proof available here.
-- GitHub repo + topics (frigate/nvr/cctv/home-assistant/ffmpeg) + **v0.1.2 tag**: owner-operated push, then release.yml does the rest.
+- GitHub repo + topics (frigate/nvr/cctv/home-assistant/ffmpeg) + **v0.1.3 tag**: owner-operated push, then release.yml does the rest.
 
 ## Next steps (best-in-class candidates, v2 per brief non-goals)
 - Pre-capture aware overlap trim (drop duplicated footage between adjacent events).

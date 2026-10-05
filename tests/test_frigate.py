@@ -235,6 +235,7 @@ class TestClipDownload:
                 return httpx.Response(404, request=request)
             if not request.url.path.endswith("/clip.mp4"):
                 return httpx.Response(404, request=request)
+            state.setdefault("headers", []).append(dict(request.headers))
             state["calls"] = state.get("calls", 0) + 1
             if state["calls"] == 1:
                 return json_response({}, status=500)
@@ -242,6 +243,16 @@ class TestClipDownload:
                                   headers={"content-length": str(len(payload))},
                                   request=request)
         return handler
+
+    def test_download_requests_uncompressed_body(self, tmp_path):
+        # the Content-Length short-read check compares raw bytes, so a
+        # compressing proxy would false-positive every clip into a skip
+        state: dict = {}
+        client = make_client(self._clip_handler(state))
+        dest = tmp_path / "clip.mp4"
+        assert client.download_clip(CAR_ID, str(dest)) is True
+        client.close()
+        assert state["headers"][0].get("accept-encoding") == "identity"
 
     def test_download_retry_once(self, tmp_path):
         state: dict = {}

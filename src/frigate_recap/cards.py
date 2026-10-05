@@ -138,6 +138,14 @@ def _write_card(path: str, text: CardText, font_path: str | None) -> None:
     draw = ImageDraw.Draw(img)
     draw.rectangle([(0, 0), (24, OUT_HEIGHT)], fill=ACCENT)
 
+    def row_font(value: str):
+        # camera names come from user config and can be long; shrink rather
+        # than run off the right edge
+        font = fonts["row"]
+        while draw.textlength(value, font=font) > OUT_WIDTH - 200 and font.size > 18:
+            font = ImageFont.truetype(font_path, font.size - 2)
+        return font
+
     y = 190
     x = 140
     draw.text((x, y), text.kicker, font=fonts["kicker"], fill=ACCENT)
@@ -148,7 +156,7 @@ def _write_card(path: str, text: CardText, font_path: str | None) -> None:
     y += 108
 
     for row in text.rows:
-        draw.text((x, y), row, font=fonts["row"], fill=FG if row else RULE)
+        draw.text((x, y), row, font=row_font(row), fill=FG if row else RULE)
         y += 58
 
     draw.text((x, OUT_HEIGHT - 90), text.footnote, font=fonts["footnote"], fill=MUTED)

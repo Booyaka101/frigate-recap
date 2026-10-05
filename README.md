@@ -83,9 +83,12 @@ $ frigate-recap --day 2026-10-04 --camera beach --label person --min-score 0.84 
   "xfade_seconds": 0.4,
   "joins": 8,
   "total_duration": 26.4,
+  "duration_basis": "event end-start from the API; rendered clips may run longer when pre/post capture applies",
   "note": "plan only: nothing was written and nothing was rendered"
 }
 ```
+
+Plan durations come from event metadata. Real Frigate clips include pre/post capture, so a rendered recap can run longer than the plan says.
 
 `--out` receives `recap-YYYY-MM-DD.mp4` and `recap-YYYY-MM-DD.json`. The manifest records every included event (id, camera, label, zones, times, score) and every skipped one with a reason (`has_clip false`, `event still in progress`, `clip download failed after retries`, ...), plus per-camera counts, the stats source and the ffmpeg version:
 
@@ -96,13 +99,16 @@ $ frigate-recap --day 2026-10-04 --camera beach --label person --min-score 0.84 
   "stats": {"events": 3, "cameras": 3, "source": "summary"},
   "included": [
     {"id": "1791382353.012345-abc123", "camera": "front_door", "label": "person",
-     "zones": ["front_door_steps"], "duration_seconds": 7.2, "score": 0.91}
+     "zones": ["front_door_steps"], "duration_seconds": 7.2, "clip_seconds": 7.2,
+     "score": 0.91}
   ],
   "skipped": [],
   "per_camera": {"front_door": {"included": 1, "skipped": 0}},
   "output": {"duration_seconds": 23.9, "width": 1920, "height": 1080, "fps": 30}
 }
 ```
+
+`duration_seconds` is the event's own length; `clip_seconds` is what made it into the video after the `--max-clip-seconds` clamp.
 
 ### Exit codes
 

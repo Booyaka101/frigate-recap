@@ -63,6 +63,7 @@ def build_manifest(
     output_duration: float | None,
     note: str | None = None,
     versions: dict | None = None,
+    clip_seconds: dict[str, float] | None = None,
 ) -> dict:
     per_camera: dict[str, dict[str, int]] = {}
     per_label: dict[str, int] = {}
@@ -73,6 +74,8 @@ def build_manifest(
     for skip in skipped:
         cam = per_camera.setdefault(skip.event.camera, {"included": 0, "skipped": 0})
         cam["skipped"] += 1
+
+    clip_seconds = clip_seconds or {}
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -97,6 +100,7 @@ def build_manifest(
                 "start_time": event.start_time,
                 "end_time": event.end_time,
                 "duration_seconds": round(event.duration, 3) if event.duration is not None else None,
+                "clip_seconds": round(clip_seconds[event.id], 3) if event.id in clip_seconds else None,
                 "score": event.score,
             }
             for event in included

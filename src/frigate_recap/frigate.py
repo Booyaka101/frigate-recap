@@ -287,7 +287,9 @@ class FrigateClient:
             if attempt:
                 self._sleep(RETRY_BACKOFF_SECONDS * attempt)
             try:
-                with self._client.stream("GET", url) as resp:
+                # identity: the Content-Length short-read check below compares
+                # raw bytes, which breaks if a proxy compresses the body
+                with self._client.stream("GET", url, headers={"Accept-Encoding": "identity"}) as resp:
                     if resp.status_code in (401, 403):
                         raise FrigateAuthError(f"auth failed: HTTP {resp.status_code}")
                     if resp.status_code == 404:

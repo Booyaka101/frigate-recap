@@ -18,6 +18,25 @@ Extra verification beyond the brief:
 - Auth: Frigate's own API auth is JWT bearer via /api/login (port 8971). `x-api-key` is the reverse-proxy pattern -> tool sends both if configured (`FRIGATE_API_KEY` as x-api-key per brief, `FRIGATE_TOKEN` as bearer).
 - Cost: zero paid inputs (self-hosted Frigate, httpx/Pillow/tzdata permissive licenses, system ffmpeg, Docker already installed, GitHub Actions/ghcr free). No cost barrier.
 
+## State: v1.1 review pass COMPLETE (2026-10-05, same day)
+
+Full review-fix-enhancement loop shipped as **0.1.1**:
+
+Fixes found by re-review + real runs:
+- Atomic output: final encode goes to `recap-<day>.mp4.part` and is `os.replace`d into place only after probing clean (the README's "never leaves a half-written recap" claim is now true; it was aspirational before).
+- `-f mp4` on staging outputs (ffmpeg cannot infer a muxer from `.part` — caught by the suite, not by review).
+- Clip downloads send `Accept-Encoding: identity` so a compressing proxy cannot false-positive the Content-Length short-read check into skipping every clip.
+- ffprobe/ffmpeg subprocess output decoded with `errors=replace`; stdout/stderr reconfigured to UTF-8 (a non-cp1252 camera name would have raised inside print after a successful render, exit 1 on Windows).
+- Card rows shrink to fit (long camera names ran off the card edge).
+- `--min-score` range-checked, `--max-clip-seconds` must be positive (clean exit 1).
+
+Enhancements:
+- Manifest `clip_seconds` per included event: the duration actually in the video after clamping.
+- Plan JSON carries `duration_basis` documenting that plan durations come from event metadata and real clips may run longer with pre/post capture.
+- tests/test_cards.py (fit-to-width, sizes); version-subprocess test derives the version instead of pinning it.
+
+Verification after the loop: 57 passed; examples regenerated on 0.1.1; docker acceptance re-run on the rebuilt 0.1.1 image (exit 0, 23.957s); live demo re-run (8 real clips, exit 0, no `.part` left behind).
+
 ## State: v1 COMPLETE
 
 Note on the brief's worked example: it says "about 27s (1.5s title + 23.9s clips + 1.5s end card)", whose own pieces sum to 26.9. The real crossfade arithmetic is 1.5 + 22.5 + 1.5 - 4 joins x 0.4 = 23.9s total, which the build produces and tests assert within +-0.5s. The brief's "23.9s" figure matches the produced total exactly.
@@ -36,9 +55,9 @@ All 8 bar items met:
 - `py -3.12` + `.venv` (uv 0.12.23 inside), ffmpeg N-127197 in `.tools/` (dev only, gitignored), Docker 29.8.0 (engine started during the build).
 
 ## Not done / owner-side
-- Nothing published: no git remote push, no ghcr push, no GitHub release (rules forbid publishing; the owner ships from the phone). `git init` + initial commit done locally.
+- Nothing published: no git remote push, no ghcr push, no GitHub release (rules forbid publishing; the owner ships from the phone). `git init` + commits done locally.
 - Acceptance (3) on the owner's real Frigate needs FRIGATE_URL for their NVR; the live demo run is the closest proof available here.
-- GitHub repo + topics (frigate/nvr/cctv/home-assistant/ffmpeg) + v0.1.0 tag: owner-operated push, then release.yml does the rest.
+- GitHub repo + topics (frigate/nvr/cctv/home-assistant/ffmpeg) + **v0.1.1 tag**: owner-operated push, then release.yml does the rest.
 
 ## Next steps (best-in-class candidates, v2 per brief non-goals)
 - Pre-capture aware overlap trim (drop duplicated footage between adjacent events).

@@ -15,6 +15,7 @@ from tests.conftest import ffmpeg_available, serve
 from tests.fixtures import (
     DAY,
     CAR_ID,
+    PERSON_ID,
     generate_clips,
     summary_rows,
     worked_example_events,
@@ -80,6 +81,9 @@ def mean_volume_db(path) -> float:
 def test_worked_example(tmp_path, clips_dir):
     app = create_mock(worked_example_events(), summary_rows(), clips=clips_dir)
     out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    # a crashed earlier run leaves a staging file; the new run must replace it
+    (out_dir / "recap-2026-10-04.mp4.part").write_bytes(b"stale")
     with serve(app) as base_url:
         code, stdout, stderr = run_cli([
             "--day", DAY.isoformat(), "--base-url", base_url,
@@ -92,10 +96,16 @@ def test_worked_example(tmp_path, clips_dir):
 
     video = out_dir / "recap-2026-10-04.mp4"
     assert video.is_file()
+    assert list(out_dir.glob("*.part")) == []
     manifest = json.loads((out_dir / "recap-2026-10-04.json").read_text(encoding="utf-8"))
     assert [e["id"] for e in manifest["included"]] == [
         "1791382353.012345-abc123", "1791386810.654321-def456", "1791434042.111222-ghi789"
     ]
+    # clip_seconds is what is actually in the video: full length here because
+    # every fixture clip is under --max-clip-seconds
+    assert {e["id"]: e["clip_seconds"] for e in manifest["included"]} == {
+        PERSON_ID: 7.2, CAR_ID: 9.8, "1791434042.111222-ghi789": 5.5
+    }
     assert manifest["skipped"] == []
     assert manifest["per_camera"] == {"backyard": {"included": 1, "skipped": 0},
                                       "driveway": {"included": 1, "skipped": 0},
@@ -214,10 +224,12 @@ def test_missing_url_exits_1():
 
 
 def test_console_script_version_subprocess():
+    from frigate_recap import __version__
+
     proc = subprocess.run([sys.executable, "-m", "frigate_recap.cli", "--version"],
                           capture_output=True, text=True)
     assert proc.returncode == 0
-    assert proc.stdout.strip() == "frigate-recap 0.1.0"
+    assert proc.stdout.strip() == f"frigate-recap {__version__}"
 
 
 def _closed_port() -> int:

@@ -28,7 +28,8 @@ def probe_clip(ffprobe: str, path: str) -> ClipInfo:
         str(path),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # errors=replace: ffprobe stderr can carry arbitrary bytes from file paths
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120, errors="replace")
     except OSError as exc:
         raise ProbeError(f"cannot run ffprobe {ffprobe!r}: {exc}") from exc
     except subprocess.TimeoutExpired as exc:

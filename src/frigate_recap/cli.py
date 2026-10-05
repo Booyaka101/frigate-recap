@@ -68,8 +68,24 @@ def _labels(value: str | None) -> tuple[str, ...]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to a legacy code page; camera and label names can
+    # be any unicode and a print raising after a successful render would turn a
+    # good run into exit 1
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.min_score is not None and not 0.0 <= args.min_score <= 1.0:
+        print("error: --min-score must be between 0.0 and 1.0", file=sys.stderr)
+        return 1
+    if args.max_clip_seconds <= 0:
+        print("error: --max-clip-seconds must be positive", file=sys.stderr)
+        return 1
 
     base_url = args.base_url or base_url_from_env()
     if not base_url:

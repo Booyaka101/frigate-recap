@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shlex
+import os
 import shutil
 import subprocess
 import tempfile
@@ -153,7 +154,7 @@ def drawtext_filter(font_path: str, textfile_path: str) -> str:
 
 def _run(cmd: list[str], what: str) -> None:
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, errors="replace")
     except OSError as exc:
         raise RenderError(f"cannot run {cmd[0]!r} for {what}: {exc}") from exc
     except subprocess.TimeoutExpired as exc:
@@ -169,7 +170,8 @@ def _display(cmd: list[str]) -> str:
 
 def ffmpeg_version(ffmpeg: str) -> str:
     try:
-        proc = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True, timeout=30)
+        proc = subprocess.run([ffmpeg, "-version"], capture_output=True, text=True,
+                              timeout=30, errors="replace")
         if proc.returncode == 0 and proc.stdout:
             return proc.stdout.splitlines()[0].strip()
     except (OSError, subprocess.TimeoutExpired):
@@ -236,6 +238,7 @@ def plan_recap(cfg: RecapConfig, client: FrigateClient) -> dict:
         "video_graph": video_graph,
         "audio_graph": audio_graph,
         "commands": commands,
+        "duration_basis": "event end-start from the API; rendered clips may run longer when pre/post capture applies",
         "note": "plan only: nothing was written and nothing was rendered",
     }
 
@@ -252,6 +255,8 @@ def final_command(ffmpeg: str, segment_paths, graph: str, out_path: str) -> list
         "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-ar", str(OUT_SAMPLE_RATE), "-ac", "2",
         "-movflags", "+faststart",
+        # the staging name ends in .part, which ffmpeg cannot infer a muxer from
+        "-f", "mp4",
         str(out_path),
     ]
 
@@ -289,6 +294,7 @@ def card_command(ffmpeg: str, png: str, dst: str, seconds: float) -> list[str]:
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-ar", str(OUT_SAMPLE_RATE), "-ac", "2",
         "-movflags", "+faststart",
+        "-f", "mp4",
         str(dst),
     ]
 
@@ -302,6 +308,10 @@ def render_recap(
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / cfg.video_name
+    # ffmpeg writes the output progressively, so encode to a staging name and
+    # move into place only once the file probes clean: a crashed run can never
+    # leave something at the final name that only looks like a recap.
+    staging_path = out_dir / f"{cfg.video_name}.part"
     manifest_path = out_dir / cfg.manifest_name
 
     window_start, window_end = cfg.window
@@ -319,6 +329,7 @@ def render_recap(
 
     workdir = Path(tempfile.mkdtemp(prefix=f"frigate-recap-{cfg.day.isoformat()}-"))
     kept: list[RecapEvent] = []
+    clip_seconds: dict[str, float] = {}
     try:
         title_png = workdir / "title.png"
         end_png = workdir / "end.png"
@@ -326,8 +337,9 @@ def render_recap(
         if not included:
             log(f"no usable events; writing a {QUIET_SECONDS:.0f}s quiet-day card")
             cards.draw_quiet_card(str(title_png), cfg.day, font)
-            _run(card_command(cfg.ffmpeg, str(title_png), str(out_path), QUIET_SECONDS), "quiet-day card")
-            final_duration = probe_clip(cfg.ffprobe, str(out_path)).duration
+            _run(card_command(cfg.ffmpeg, str(title_png), str(staging_path), QUIET_SECONDS), "quiet-day card")
+            final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
+            os.replace(staging_path, out_path)
         else:
             cards.draw_title_card(str(title_png), cfg.day, stats["events"], stats["cameras"], font)
 
@@ -365,14 +377,16 @@ def render_recap(
                 )
                 segment_paths.append(seg)
                 kept.append(event)
+                clip_seconds[event.id] = duration
                 log(f"clip {len(kept)}/{len(included)}: {text} ({duration:.1f}s)")
 
             if not segment_paths:
                 log(f"every clip failed; writing a {QUIET_SECONDS:.0f}s quiet-day card instead")
                 note = (note + "; " if note else "") + "all clips failed to render; quiet-day card written"
                 cards.draw_quiet_card(str(title_png), cfg.day, font)
-                _run(card_command(cfg.ffmpeg, str(title_png), str(out_path), QUIET_SECONDS), "quiet-day card")
-                final_duration = probe_clip(cfg.ffprobe, str(out_path)).duration
+                _run(card_command(cfg.ffmpeg, str(title_png), str(staging_path), QUIET_SECONDS), "quiet-day card")
+                final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
+                os.replace(staging_path, out_path)
             else:
                 # The end card counts what is actually in the video, so a clip
                 # lost to a download failure moves to the skipped line.
@@ -405,8 +419,9 @@ def render_recap(
                         "narrow the day with --camera, --label or --max-clip-seconds"
                     )
 
-                _run(final_command(cfg.ffmpeg, segment_paths, graph, str(out_path)), "final concat")
-                final_duration = probe_clip(cfg.ffprobe, str(out_path)).duration
+                _run(final_command(cfg.ffmpeg, segment_paths, graph, str(staging_path)), "final concat")
+                final_duration = probe_clip(cfg.ffprobe, str(staging_path)).duration
+                os.replace(staging_path, out_path)
 
         log(f"wrote {out_path} ({final_duration:.1f}s, stats source: {stats.get('source')})")
         manifest = manifest_mod.build_manifest(
@@ -418,6 +433,7 @@ def render_recap(
             final_duration,
             note=note,
             versions={"frigate_recap": __version__, "ffmpeg": ffmpeg_version(cfg.ffmpeg)},
+            clip_seconds=clip_seconds,
         )
         manifest_mod.write(str(manifest_path), manifest)
         log(f"wrote {manifest_path}")

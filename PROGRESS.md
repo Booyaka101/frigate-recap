@@ -94,14 +94,19 @@ All 8 bar items met:
 ## Verified working (this box)
 - `py -3.12` + `.venv` (uv 0.12.23 inside), ffmpeg N-127197 in `.tools/` (dev only, gitignored), Docker 29.8.0 (engine started during the build).
 
-## Release record
-- v0.1.3 published: repo github.com/Booyaka101/frigate-recap, topics
-  frigate/nvr/cctv/home-assistant/ffmpeg, GitHub Release with sdist+wheel,
-  ghcr.io/booyaka101/frigate-recap image via .github/workflows/release.yml.
-- CI (ubuntu + windows, py3.12, uv --frozen) green on the released commit
-  before the tag was pushed, verified through the check-runs API.
-- Acceptance (3) on the owner's own NVR remains owner-side: the tool was
-  verified against the live demo.frigate.video instance instead.
+## Release record (2026-10-05)
+- v0.1.3 shipped. Sequence followed the house rules: pushed main first, waited
+  for CI on the exact commit (3/3 check-runs success: ubuntu, windows, docker,
+  verified via the check-runs API), THEN pushed the tag; the release workflow
+  built and published the artifacts.
+- Repo: github.com/Booyaka101/frigate-recap (public), topics
+  frigate/nvr/cctv/home-assistant/ffmpeg.
+- GitHub Release v0.1.3 with frigate_recap-0.1.3 wheel + tar.gz.
+- ghcr.io/booyaka101/frigate-recap:0.1.3 published and PUBLIC (verified by
+  anonymous docker pull), and the pulled image was itself run against the mock:
+  exit 0, 3 clips, expected 23.9s / actual 23.957s.
+- Acceptance (3) on the owner's own NVR remains the one owner-side step
+  (needs their FRIGATE_URL); the live demo instance run stands in as proof.
 
 ## Next steps (best-in-class candidates, v2 per brief non-goals)
 - Pre-capture aware overlap trim (drop duplicated footage between adjacent events).
